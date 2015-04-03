@@ -8,22 +8,23 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void print_usage(bool moreinformation) {
-  printf("Usage: dye [OPTION]... COMMAND\n");
+void print_usage(const char* name, bool moreinformation) {
+  printf("Usage: %s [OPTION]... COMMAND\n", name);
   if (moreinformation)
-    printf("Try 'dye -h' for more inforamtion\n");
+    printf("Try '%s -h' for more inforamtion\n", name);
 }
 
-void print_help() {
-  print_usage(false);
+void print_help(const char* name) {
+  print_usage(name, false);
   printf("Colorize output of a command's stdout and stderr.\n"
-         "Example: dye make\n\n"
+         "Example: %s make\n\n"
          "Options:\n"
          "  -o <color>    Color for stdout (default: none)\n"
          "  -e <color>    Color for stderr (default: red)\n"
          "  -h            Print this help.\n\n"
          "  Valid colors are: \033[31mred, \033[32mgreen, \033[33mbrown, \033[34mblue, "
-         "\033[35mmagenta, \033[36mcyan, \033[37mwhite\033[39m\n");
+         "\033[35mmagenta, \033[36mcyan, \033[37mwhite\033[39m\n",
+         name);
 }
 
 int choose_color(char* colorname, char** colorcode) {
@@ -39,8 +40,10 @@ int choose_color(char* colorname, char** colorcode) {
 }
 
 int main(int argc, char** argv) {
-  if (argc < 2)
+  if (argc < 2) {
+    print_usage(argv[0], true);
     return -1;
+  }
 
   char* out_color = "\033[39m";
   char* err_color = "\033[31m";
@@ -52,23 +55,23 @@ int main(int argc, char** argv) {
     case 'o':
       if (choose_color(optarg, &out_color)) {
         fprintf(stderr, "Invalid color for stdout.\n");
-        print_usage(true);
+        print_usage(argv[0], true);
         return -1;
       }
       break;
     case 'e':
       if (choose_color(optarg, &err_color)) {
         fprintf(stderr, "Invalid color for stderr.\n");
-        print_usage(true);
+        print_usage(argv[0], true);
         return -1;
       }
       break;
     case 'h':
-      print_help();
+      print_help(argv[0]);
       return 0;
       break;
     case '?':
-      print_usage(true);
+      print_usage(argv[0], true);
       return -1;
       break;
     }
