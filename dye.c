@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -82,6 +83,11 @@ int main(int argc, char** argv) {
   if (pipe(outpipe_fds) || pipe(errpipe_fds))
     return -1;
 
+  fcntl(outpipe_fds[0], F_SETFD, FD_CLOEXEC);
+  fcntl(outpipe_fds[1], F_SETFD, FD_CLOEXEC);
+  fcntl(errpipe_fds[0], F_SETFD, FD_CLOEXEC);
+  fcntl(errpipe_fds[1], F_SETFD, FD_CLOEXEC);
+
   char** exec_args = calloc(sizeof(argv[0]), argc - optind + 1); // One extra for null termination.
   if (!exec_args)
     return -1;
@@ -114,7 +120,7 @@ int main(int argc, char** argv) {
   struct pollfd pollfds[2];
   pollfds[0].fd = outpipe_fds[0];
   pollfds[1].fd = errpipe_fds[0];
-  pollfds[0].events = pollfds[1].events = POLLIN | POLLHUP;
+  pollfds[0].events = pollfds[1].events = POLLIN;
 
   // Line buffer.
   const size_t bufsiz = 80;
