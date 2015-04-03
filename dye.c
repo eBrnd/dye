@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <stdbool.h>
@@ -43,7 +44,7 @@ int choose_color(char* colorname, char const** colorcode) {
 int main(int argc, char** argv) {
   if (argc < 2) {
     print_usage(argv[0], true);
-    return -1;
+    return 128;
   }
 
   char const* out_color = "\033[39m";
@@ -57,14 +58,14 @@ int main(int argc, char** argv) {
       if (choose_color(optarg, &out_color)) {
         fprintf(stderr, "Invalid color for stdout.\n");
         print_usage(argv[0], true);
-        return -1;
+        return 128;
       }
       break;
     case 'e':
       if (choose_color(optarg, &err_color)) {
         fprintf(stderr, "Invalid color for stderr.\n");
         print_usage(argv[0], true);
-        return -1;
+        return 128;
       }
       break;
     case 'h':
@@ -73,15 +74,17 @@ int main(int argc, char** argv) {
       break;
     case '?':
       print_usage(argv[0], true);
-      return -1;
+      return 128;
       break;
     }
   }
 
   int outpipe_fds[2];
   int errpipe_fds[2];
-  if (pipe(outpipe_fds) || pipe(errpipe_fds))
-    return -1;
+  if (pipe(outpipe_fds) || pipe(errpipe_fds)) {
+    perror("pipe");
+    return 128;
+  }
 
   fcntl(outpipe_fds[0], F_SETFD, FD_CLOEXEC);
   fcntl(outpipe_fds[1], F_SETFD, FD_CLOEXEC);
@@ -89,38 +92,46 @@ int main(int argc, char** argv) {
   fcntl(errpipe_fds[1], F_SETFD, FD_CLOEXEC);
 
   char** exec_args = calloc(sizeof(argv[0]), argc - optind + 1); // One extra for null termination.
-  if (!exec_args)
-    return -1;
+  if (!exec_args) {
+    perror("calloc");
+    return 128;
+  }
   for (int i = optind; i < argc; i++)
     exec_args[i-optind] = argv[i];
 
   int pid = fork();
   if (pid == -1) {
+    perror("fork");
     free(exec_args);
-    return -1;
+    return 128;
   }
 
   if (pid == 0) { // Child.
-    dup2(outpipe_fds[1], STDOUT_FILENO); // Move writing end of pipes to stdout and stderr.
-    dup2(errpipe_fds[1], STDERR_FILENO);
+    // Move writing end of pipes to stdout and stderr.
+    while (dup2(outpipe_fds[1], STDOUT_FILENO) < 0 || dup2(errpipe_fds[1], STDERR_FILENO) < 0) {
+      if (errno != EINTR) {
+        free(exec_args);
+        perror("dup2");
+        return 128;
+      }
+    }
 
-    int res = execvp(exec_args[0], exec_args);
+    execvp(exec_args[0], exec_args);
+
+    // We reach this point only if execvp fails.
+    perror("exec");
     free(exec_args);
-
-    return -1; // Note: we reach this point only if exec fails (better print an error message).
+    return 128;
   }
 
   // Parent.
-
-  // Close writing end of pipes so they're only open in the child now.
-  close(outpipe_fds[1]);
-  close(errpipe_fds[1]);
   free(exec_args);
 
-  struct pollfd pollfds[2];
-  pollfds[0].fd = outpipe_fds[0];
-  pollfds[1].fd = errpipe_fds[0];
-  pollfds[0].events = pollfds[1].events = POLLIN;
+  // Close writing end of pipes so they're only open in the child now.
+  close(outpipe_fds[1]); // (Ignore error code of close here because the only error that can happen
+  close(errpipe_fds[1]); //  in this case is EINTR, and linux says "don't retry", so we just go on.)
+
+  struct pollfd pollfds[] = { { outpipe_fds[0], POLLIN, 0 }, { errpipe_fds[0], POLLIN, 0 } };
 
   // Line buffer.
   const size_t bufsiz = 80;
@@ -148,10 +159,13 @@ int main(int argc, char** argv) {
     }
   }
 
-  int status;
-  if (wait(&status) < 0)
-    return -1;
-
   write(STDOUT_FILENO, "\033[39m", colorcode_len); // Reset color before exiting.
+
+  int status;
+  if (wait(&status) < 0) {
+    perror("wait");
+    return 128;
+  }
+
   return WEXITSTATUS(status);
 }
