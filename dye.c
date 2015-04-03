@@ -8,13 +8,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void print_usage() {
-  printf("Usage: dye [OPTION]... COMMAND\n"
-         "Try 'dye -h' for more inforamtion\n");
+void print_usage(bool moreinformation) {
+  printf("Usage: dye [OPTION]... COMMAND\n");
+  if (moreinformation)
+    printf("Try 'dye -h' for more inforamtion\n");
 }
 
 void print_help() {
-  print_usage();
+  print_usage(false);
   printf("Colorize output of a command's stdout and stderr.\n"
          "Example: dye make\n\n"
          "Options:\n"
@@ -51,14 +52,14 @@ int main(int argc, char** argv) {
     case 'o':
       if (choose_color(optarg, &out_color)) {
         fprintf(stderr, "Invalid color for stdout.\n");
-        print_usage();
+        print_usage(true);
         return -1;
       }
       break;
     case 'e':
       if (choose_color(optarg, &err_color)) {
         fprintf(stderr, "Invalid color for stderr.\n");
-        print_usage();
+        print_usage(true);
         return -1;
       }
       break;
@@ -67,7 +68,7 @@ int main(int argc, char** argv) {
       return 0;
       break;
     case '?':
-      print_usage();
+      print_usage(true);
       return -1;
       break;
     }
