@@ -1,6 +1,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+const char default_color_arg[] = "green";
 
 const char* choose_color(const char* arg) {
   if (!strcmp(arg, "red")) return "\033[31m";
@@ -10,7 +13,16 @@ const char* choose_color(const char* arg) {
   if (!strcmp(arg, "magenta")) return "\033[35m";
   if (!strcmp(arg, "cyan")) return "\033[36m";
   if (!strcmp(arg, "white")) return "\033[37m";
-  return "";
+
+  if (!strcmp(arg, "help") || !strcmp(arg, "-h") || !strcmp(arg, "--help")) {
+    printf("colorpipe - colorize output\n\n"
+           "  Usage: colorpipe <color>\n\n"
+           "  Valid colors are: \033[31mred, \033[32mgreen, \033[33mbrown, \033[34mblue, \033[35mmagenta, \033[36mcyan, \033[37mwhite\033[39m\n");
+    exit(0);
+  }
+
+  fprintf(stderr, "\033[36mcolorpipe \033[31merror: \033[39mInvalid color code.\n");
+  exit(22);
 }
 
 const char color_normal[] = "\033[39m";
@@ -23,8 +35,7 @@ int main(int argc, char** argv) {
   if (argc > 1)
     strcpy(color_string, choose_color(argv[1]));
   else
-    strcpy(color_string, choose_color("green"));
-
+    strcpy(color_string, choose_color(default_color_arg));
 
   strcpy(color_string + output_pos + 1, color_normal);
 
