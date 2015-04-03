@@ -1,26 +1,40 @@
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdio.h>
 #include <poll.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main(int argc, char** argv) {
+  if (argc < 2)
+    return -1;
+
   int outpipe_fds[2];
   int errpipe_fds[2];
   if (pipe(outpipe_fds) || pipe(errpipe_fds))
     return -1;
 
-  int pid = fork();
+  char** exec_args = calloc(sizeof(argv[0]), argc); // One extra for null termination.
+  for (int i = 0; i < argc-1; i++)
+    exec_args[i] = argv[i+1];
 
+  int pid = fork();
   if (pid == -1)
+  {
+    free(exec_args);
     return -1;
+  }
 
   if (pid == 0) // Child.
   {
     dup2(outpipe_fds[1], STDOUT_FILENO); // Move writing end of pipes to stdout and stderr.
     dup2(errpipe_fds[1], STDERR_FILENO);
-    return execl(argv[1], "");
+
+    int res = execvp(exec_args[0], exec_args);
+    free(exec_args);
+
+    return res;
   }
 
   // Main thread.
@@ -29,7 +43,6 @@ int main(int argc, char** argv) {
   close(outpipe_fds[1]);
   close(errpipe_fds[1]);
 
-  // Set up polling.
   struct pollfd pollfds[2];
   pollfds[0].fd = outpipe_fds[0];
   pollfds[1].fd = errpipe_fds[0];
@@ -40,7 +53,6 @@ int main(int argc, char** argv) {
   char buffer[bufsiz];
   size_t nbyte;
 
-  // Poll loop.
   bool running = true;
   while (running) {
     if (poll(pollfds, 2, -1)) {
@@ -48,6 +60,7 @@ int main(int argc, char** argv) {
         while (0 < (nbyte = read(outpipe_fds[0], buffer, bufsiz)))
           write(STDOUT_FILENO, buffer, nbyte);
       }
+
       if (pollfds[1].revents & POLLIN) {
         while (0 < (nbyte = read(errpipe_fds[0], buffer, bufsiz)))
         {
@@ -62,7 +75,6 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Wait for child to terminate.
   int status;
   if (0 > wait(&status))
     return -1;
