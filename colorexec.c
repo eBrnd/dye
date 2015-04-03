@@ -1,14 +1,47 @@
+#include <ctype.h>
 #include <poll.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+void print_usage() {
+  printf("Usage: colorexec [OPTION]... COMMAND\n"
+         "Try 'colorexec -h' for more inforamtion\n");
+}
+
+void print_help() {
+  print_usage();
+  printf("Colorize output of a command's stdout and stderr.\n"
+         "Example: colorexec make\n\n"
+         "Options:\n"
+         "  -o <color>    Color for stdout (default: none)\n"
+         "  -e <color>    Color for stderr (default: red)\n"
+         "  -h            Print this help.");
+}
+
 int main(int argc, char** argv) {
   if (argc < 2)
     return -1;
+
+  char c;
+  while ((c = getopt(argc, argv, "o:e:h")) != -1) {
+    switch (c) {
+    case 'o':
+      break;
+    case 'e':
+      break;
+    case 'h':
+      print_help();
+      break;
+    case '?':
+      print_usage();
+      break;
+    }
+  }
 
   int outpipe_fds[2];
   int errpipe_fds[2];
@@ -16,32 +49,33 @@ int main(int argc, char** argv) {
     return -1;
 
   char** exec_args = calloc(sizeof(argv[0]), argc); // One extra for null termination.
+  if (!exec_args)
+    return -1;
   for (int i = 0; i < argc-1; i++)
     exec_args[i] = argv[i+1];
 
   int pid = fork();
-  if (pid == -1)
-  {
+  if (pid == -1) {
     free(exec_args);
     return -1;
   }
 
-  if (pid == 0) // Child.
-  {
+  if (pid == 0) { // Child.
     dup2(outpipe_fds[1], STDOUT_FILENO); // Move writing end of pipes to stdout and stderr.
     dup2(errpipe_fds[1], STDERR_FILENO);
 
     int res = execvp(exec_args[0], exec_args);
     free(exec_args);
 
-    return res;
+    return -1; // Note: we reach this point only if exec fails (better print an error message).
   }
 
-  // Main thread.
+  // Parent.
 
   // Close writing end of pipes so they're only open in the child now.
   close(outpipe_fds[1]);
   close(errpipe_fds[1]);
+  free(exec_args);
 
   struct pollfd pollfds[2];
   pollfds[0].fd = outpipe_fds[0];
