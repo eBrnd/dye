@@ -127,30 +127,29 @@ int main(int argc, char** argv) {
   char buffer[bufsiz];
   size_t nbyte;
 
-  bool running = true;
-  while (running) {
+  for (;;) {
     if (poll(pollfds, 2, -1)) {
       if (pollfds[0].revents & POLLIN) {
-        while (0 < (nbyte = read(outpipe_fds[0], buffer, bufsiz))) {
+        while ((nbyte = read(outpipe_fds[0], buffer, bufsiz)) > 0) {
           write(STDOUT_FILENO, out_color, colorcode_len);
           write(STDOUT_FILENO, buffer, nbyte);
         }
       }
 
       if (pollfds[1].revents & POLLIN) {
-        while (0 < (nbyte = read(errpipe_fds[0], buffer, bufsiz))) {
+        while ((nbyte = read(errpipe_fds[0], buffer, bufsiz)) > 0) {
           write(STDOUT_FILENO, err_color, colorcode_len);
           write(STDOUT_FILENO, buffer, nbyte);
         }
       }
 
       if (pollfds[0].revents & POLLHUP || pollfds[1].revents & POLLHUP)
-        running = false;
+        break;
     }
   }
 
   int status;
-  if (0 > wait(&status))
+  if (wait(&status) < 0)
     return -1;
 
   write(STDOUT_FILENO, "\033[39m", colorcode_len); // Reset color before exiting.
