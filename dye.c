@@ -9,14 +9,14 @@
 #include <unistd.h>
 
 void print_usage() {
-  printf("Usage: colorexec [OPTION]... COMMAND\n"
-         "Try 'colorexec -h' for more inforamtion\n");
+  printf("Usage: dye [OPTION]... COMMAND\n"
+         "Try 'dye -h' for more inforamtion\n");
 }
 
 void print_help() {
   print_usage();
   printf("Colorize output of a command's stdout and stderr.\n"
-         "Example: colorexec make\n\n"
+         "Example: dye make\n\n"
          "Options:\n"
          "  -o <color>    Color for stdout (default: none)\n"
          "  -e <color>    Color for stderr (default: red)\n"
