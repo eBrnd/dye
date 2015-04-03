@@ -20,25 +20,55 @@ void print_help() {
          "Options:\n"
          "  -o <color>    Color for stdout (default: none)\n"
          "  -e <color>    Color for stderr (default: red)\n"
-         "  -h            Print this help.");
+         "  -h            Print this help.\n\n"
+         "  Valid colors are: \033[31mred, \033[32mgreen, \033[33mbrown, \033[34mblue, "
+         "\033[35mmagenta, \033[36mcyan, \033[37mwhite\033[39m\n");
+}
+
+int choose_color(char* colorname, char** colorcode) {
+  if (!strcmp(colorname, "red"))     { *colorcode = "\033[31m"; return 0; }
+  if (!strcmp(colorname, "green"))   { *colorcode = "\033[32m"; return 0; }
+  if (!strcmp(colorname, "brown"))   { *colorcode = "\033[33m"; return 0; }
+  if (!strcmp(colorname, "blue"))    { *colorcode = "\033[34m"; return 0; }
+  if (!strcmp(colorname, "magenta")) { *colorcode = "\033[35m"; return 0; }
+  if (!strcmp(colorname, "cyan"))    { *colorcode = "\033[36m"; return 0; }
+  if (!strcmp(colorname, "white"))   { *colorcode = "\033[37m"; return 0; }
+
+  return -1;
 }
 
 int main(int argc, char** argv) {
   if (argc < 2)
     return -1;
 
+  char* out_color = "\033[39m";
+  char* err_color = "\033[31m";
+  const size_t colorcode_len = 5;
+
   char c;
   while ((c = getopt(argc, argv, "o:e:h")) != -1) {
     switch (c) {
     case 'o':
+      if (choose_color(optarg, &out_color)) {
+        fprintf(stderr, "Invalid color for stdout.\n");
+        print_usage();
+        return -1;
+      }
       break;
     case 'e':
+      if (choose_color(optarg, &err_color)) {
+        fprintf(stderr, "Invalid color for stderr.\n");
+        print_usage();
+        return -1;
+      }
       break;
     case 'h':
       print_help();
+      return 0;
       break;
     case '?':
       print_usage();
+      return -1;
       break;
     }
   }
@@ -48,11 +78,11 @@ int main(int argc, char** argv) {
   if (pipe(outpipe_fds) || pipe(errpipe_fds))
     return -1;
 
-  char** exec_args = calloc(sizeof(argv[0]), argc); // One extra for null termination.
+  char** exec_args = calloc(sizeof(argv[0]), argc - optind + 1); // One extra for null termination.
   if (!exec_args)
     return -1;
-  for (int i = 0; i < argc-1; i++)
-    exec_args[i] = argv[i+1];
+  for (int i = optind; i < argc; i++)
+    exec_args[i-optind] = argv[i];
 
   int pid = fork();
   if (pid == -1) {
@@ -91,16 +121,16 @@ int main(int argc, char** argv) {
   while (running) {
     if (poll(pollfds, 2, -1)) {
       if (pollfds[0].revents & POLLIN) {
-        while (0 < (nbyte = read(outpipe_fds[0], buffer, bufsiz)))
+        while (0 < (nbyte = read(outpipe_fds[0], buffer, bufsiz))) {
+          write(STDOUT_FILENO, out_color, colorcode_len);
           write(STDOUT_FILENO, buffer, nbyte);
+        }
       }
 
       if (pollfds[1].revents & POLLIN) {
-        while (0 < (nbyte = read(errpipe_fds[0], buffer, bufsiz)))
-        {
-          write(STDOUT_FILENO, ">", 1);
+        while (0 < (nbyte = read(errpipe_fds[0], buffer, bufsiz))) {
+          write(STDOUT_FILENO, err_color, colorcode_len);
           write(STDOUT_FILENO, buffer, nbyte);
-          write(STDOUT_FILENO, "<", 1);
         }
       }
 
@@ -113,5 +143,6 @@ int main(int argc, char** argv) {
   if (0 > wait(&status))
     return -1;
 
+  write(STDOUT_FILENO, "\033[39m", colorcode_len); // Reset color before exiting.
   return WEXITSTATUS(status);
 }
