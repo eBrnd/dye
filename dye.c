@@ -27,7 +27,7 @@ void print_help(const char* name) {
          name);
 }
 
-int choose_color(char* colorname, char** colorcode) {
+int choose_color(char* colorname, char const** colorcode) {
   if (!strcmp(colorname, "red"))     { *colorcode = "\033[31m"; return 0; }
   if (!strcmp(colorname, "green"))   { *colorcode = "\033[32m"; return 0; }
   if (!strcmp(colorname, "brown"))   { *colorcode = "\033[33m"; return 0; }
@@ -45,8 +45,8 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  char* out_color = "\033[39m";
-  char* err_color = "\033[31m";
+  char const* out_color = "\033[39m";
+  char const* err_color = "\033[31m";
   const size_t colorcode_len = 5;
 
   char c;
