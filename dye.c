@@ -172,11 +172,6 @@ int main(int argc, char** argv) {
 
   struct pollfd pollfds[] = { { outpipe_fds[0], POLLIN, 0 }, { errpipe_fds[0], POLLIN, 0 } };
 
-  // Line buffer.
-  const size_t bufsiz = 80;
-  char buffer[bufsiz];
-  size_t nbyte;
-
   for (;;) {
     int pollres = poll(pollfds, 2, -1);
 
