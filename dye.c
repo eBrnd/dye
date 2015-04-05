@@ -181,13 +181,11 @@ int main(int argc, char** argv) {
     int pollres = poll(pollfds, 2, -1);
 
     if (pollres > 0) {
-      if (pollfds[0].revents & POLLIN)
-        if (dye_pipe(outpipe_fds[0], out_color))
-          continue;
+      if (pollfds[0].revents & POLLIN && dye_pipe(outpipe_fds[0], out_color) && pollres == 1)
+        continue; // Check pollres so that we only continue if there's no more events.
 
-      if (pollfds[1].revents & POLLIN)
-        if (dye_pipe(errpipe_fds[0], err_color))
-          continue;
+      if (pollfds[1].revents & POLLIN && dye_pipe(errpipe_fds[0], err_color))
+        continue;
 
       if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
         break;
