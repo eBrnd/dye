@@ -50,6 +50,7 @@ ssize_t do_write(int fd, const char* buf, size_t len) {
       if (errno == EINTR)
         continue;
 
+      perror("write");
       return -1;
     }
 
@@ -61,7 +62,7 @@ ssize_t do_write(int fd, const char* buf, size_t len) {
   return total;
 }
 
-void dye_pipe(int in_fd, const char* color_string) {
+bool dye_pipe(int in_fd, const char* color_string) {
   char buffer[128];
   size_t nbyte;
 
@@ -71,10 +72,13 @@ void dye_pipe(int in_fd, const char* color_string) {
     if (nbyte <= 0) // Less than 0: Error; Equals 0: Pipe's empty.
       break;
 
-    do_write(STDOUT_FILENO, color_string, strlen(color_string));
-    do_write(STDOUT_FILENO, buffer, nbyte);
+    if (do_write(STDOUT_FILENO, color_string, strlen(color_string)) < 0)
+      return false;
+    if (do_write(STDOUT_FILENO, buffer, nbyte) < 0)
+      return false;
   }
 
+  return true;
 }
 
 int main(int argc, char** argv) {
@@ -174,16 +178,30 @@ int main(int argc, char** argv) {
   size_t nbyte;
 
   for (;;) {
-    if (poll(pollfds, 2, -1)) {
+    int pollres = poll(pollfds, 2, -1);
+
+    if (pollres > 0) {
       if (pollfds[0].revents & POLLIN)
-        dye_pipe(outpipe_fds[0], out_color);
+        if (dye_pipe(outpipe_fds[0], out_color))
+          continue;
 
       if (pollfds[1].revents & POLLIN)
-        dye_pipe(errpipe_fds[0], err_color);
+        if (dye_pipe(errpipe_fds[0], err_color))
+          continue;
 
       if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
         break;
+    } else if (pollres < 0) {
+      if (errno == EINTR || errno == EAGAIN)
+        continue;
+
+      perror("poll");
     }
+
+    // If we fall through here, either the dye_pipe or the poll have errored out. Just clean up the
+    // mess and quit.
+    kill(pid, SIGTERM);
+    break;
   }
 
   // Reset color before exiting.
