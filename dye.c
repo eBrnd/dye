@@ -29,6 +29,8 @@ void print_help(const char* name) {
          name);
 }
 
+static const size_t colorcode_len = 5;
+
 int choose_color(char* colorname, char const** colorcode) {
   if (!strcmp(colorname, "red"))     { *colorcode = "\033[31m"; return 0; }
   if (!strcmp(colorname, "green"))   { *colorcode = "\033[32m"; return 0; }
@@ -41,6 +43,16 @@ int choose_color(char* colorname, char const** colorcode) {
   return -1;
 }
 
+void dye_pipe(int in_fd, const char* color_string) {
+  char buffer[128];
+  size_t nbyte;
+
+  while((nbyte = read(in_fd, buffer, sizeof(buffer))) > 0) {
+    write(STDOUT_FILENO, color_string, colorcode_len);
+    write(STDOUT_FILENO, buffer, nbyte);
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
     print_usage(argv[0], true);
@@ -49,7 +61,6 @@ int main(int argc, char** argv) {
 
   char const* out_color = "\033[39m";
   char const* err_color = "\033[31m";
-  const size_t colorcode_len = 5;
 
   char c;
   while ((c = getopt(argc, argv, "o:e:h")) != -1) {
@@ -140,21 +151,13 @@ int main(int argc, char** argv) {
 
   for (;;) {
     if (poll(pollfds, 2, -1)) {
-      if (pollfds[0].revents & POLLIN) {
-        while ((nbyte = read(outpipe_fds[0], buffer, bufsiz)) > 0) {
-          write(STDOUT_FILENO, out_color, colorcode_len);
-          write(STDOUT_FILENO, buffer, nbyte);
-        }
-      }
+      if (pollfds[0].revents & POLLIN)
+        dye_pipe(outpipe_fds[0], out_color);
 
-      if (pollfds[1].revents & POLLIN) {
-        while ((nbyte = read(errpipe_fds[0], buffer, bufsiz)) > 0) {
-          write(STDOUT_FILENO, err_color, colorcode_len);
-          write(STDOUT_FILENO, buffer, nbyte);
-        }
-      }
+      if (pollfds[1].revents & POLLIN)
+        dye_pipe(errpipe_fds[0], err_color);
 
-      if (pollfds[0].revents & POLLHUP || pollfds[1].revents & POLLHUP)
+      if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
         break;
     }
   }
