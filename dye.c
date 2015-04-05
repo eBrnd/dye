@@ -29,8 +29,6 @@ void print_help(const char* name) {
          name);
 }
 
-static const size_t colorcode_len = 5;
-
 int choose_color(char* colorname, char const** colorcode) {
   if (!strcmp(colorname, "red"))     { *colorcode = "\033[31m"; return 0; }
   if (!strcmp(colorname, "green"))   { *colorcode = "\033[32m"; return 0; }
@@ -53,7 +51,7 @@ void dye_pipe(int in_fd, const char* color_string) {
     if (nbyte <= 0) // Less than 0: Error; Equals 0: Pipe's empty.
       break;
 
-    write(STDOUT_FILENO, color_string, colorcode_len);
+    write(STDOUT_FILENO, color_string, strlen(color_string));
     write(STDOUT_FILENO, buffer, nbyte);
   }
 
@@ -168,7 +166,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  write(STDOUT_FILENO, "\033[39m", colorcode_len); // Reset color before exiting.
+  char reset_colorcode[] = "\033[39m";
+  write(STDOUT_FILENO, reset_colorcode, strlen(reset_colorcode)); // Reset color before exiting.
 
   int status;
   if (wait(&status) < 0) {
