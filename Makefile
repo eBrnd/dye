@@ -1,4 +1,4 @@
-CC = clang
+CC = clang -Wall -Werror -g
 
 SOURCES = $(wildcard *.c)
 BINARIES = $(patsubst %.c, %, $(SOURCES))

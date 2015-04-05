@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -64,7 +65,7 @@ ssize_t do_write(int fd, const char* buf, size_t len) {
 
 bool dye_pipe(int in_fd, const char* color_string) {
   char buffer[128];
-  size_t nbyte;
+  ssize_t nbyte;
 
   for (;;) {
     while ((nbyte = read(in_fd, buffer, sizeof(buffer))) == -1 && errno == EINTR);
@@ -118,17 +119,31 @@ int main(int argc, char** argv) {
     }
   }
 
-  int outpipe_fds[2];
-  int errpipe_fds[2];
-  if (pipe(outpipe_fds) || pipe(errpipe_fds)) {
-    perror("pipe");
+  int outsock_fds[2];
+  int errsock_fds[2];
+  if (socketpair(AF_LOCAL, SOCK_SEQPACKET, 0, outsock_fds)
+      || socketpair(AF_LOCAL, SOCK_SEQPACKET, 0, errsock_fds)) {
+    perror("socketpair");
     return 128;
   }
 
-  fcntl(outpipe_fds[0], F_SETFD, FD_CLOEXEC);
-  fcntl(outpipe_fds[1], F_SETFD, FD_CLOEXEC);
-  fcntl(errpipe_fds[0], F_SETFD, FD_CLOEXEC);
-  fcntl(errpipe_fds[1], F_SETFD, FD_CLOEXEC);
+  if (fcntl(outsock_fds[0], F_SETFD, FD_CLOEXEC) == -1
+      || fcntl(outsock_fds[1], F_SETFD, FD_CLOEXEC) == -1
+      || fcntl(errsock_fds[0], F_SETFD, FD_CLOEXEC) == -1
+      || fcntl(errsock_fds[1], F_SETFD, FD_CLOEXEC) == -1
+      || fcntl(outsock_fds[0], F_SETFL, O_NONBLOCK) == -1
+      || fcntl(errsock_fds[0], F_SETFL, O_NONBLOCK) == -1) {
+    perror("fcntl");
+    return 128;
+  }
+
+  int sockoptval = 1;
+  if (setsockopt(outsock_fds[0], SOL_SOCKET, SO_TIMESTAMP, &sockoptval, sizeof(sockoptval)) < 0
+      || setsockopt(errsock_fds[0], SOL_SOCKET, SO_TIMESTAMP, &sockoptval, sizeof(sockoptval)) < 0)
+  {
+    perror("setsockopt");
+    return 128;
+  }
 
   char** exec_args = calloc(sizeof(argv[0]), argc - optind + 1); // One extra for null termination.
   if (!exec_args) {
@@ -146,8 +161,8 @@ int main(int argc, char** argv) {
   }
 
   if (pid == 0) { // Child.
-    // Move writing end of pipes to stdout and stderr.
-    while (dup2(outpipe_fds[1], STDOUT_FILENO) < 0 || dup2(errpipe_fds[1], STDERR_FILENO) < 0) {
+    // Move writing end of socketpairs to stdout and stderr.
+    while (dup2(outsock_fds[1], STDOUT_FILENO) < 0 || dup2(errsock_fds[1], STDERR_FILENO) < 0) {
       if (errno != EINTR) {
         free(exec_args);
         perror("dup2");
@@ -166,33 +181,34 @@ int main(int argc, char** argv) {
   // Parent.
   free(exec_args);
 
-  // Close writing end of pipes so they're only open in the child now.
-  close(outpipe_fds[1]); // (Ignore error code of close here because the only error that can happen
-  close(errpipe_fds[1]); //  in this case is EINTR, and linux says "don't retry", so we just go on.)
+  // Close writing end of socketpairs so they're only open in the child now.
+  close(outsock_fds[1]); // (Ignore error code of close here because the only error that can happen
+  close(errsock_fds[1]); //  in this case is EINTR, and linux says "don't retry", so we just go on.)
 
-  struct pollfd pollfds[] = { { outpipe_fds[0], POLLIN, 0 }, { errpipe_fds[0], POLLIN, 0 } };
+  struct pollfd pollfds[] = { { outsock_fds[0], POLLIN, 0 }, { errsock_fds[0], POLLIN, 0 } };
 
   for (;;) {
     int pollres = poll(pollfds, 2, -1);
 
     if (pollres > 0) {
-      if (pollfds[0].revents & POLLIN && dye_pipe(outpipe_fds[0], out_color) && pollres == 1)
-        continue; // Check pollres so that we only continue if there's no more events.
+      if (pollfds[0].revents & POLLIN && !dye_pipe(outsock_fds[0], out_color))
+        goto error;
 
-      if (pollfds[1].revents & POLLIN && dye_pipe(errpipe_fds[0], err_color))
-        continue;
+      if (pollfds[1].revents & POLLIN && !dye_pipe(errsock_fds[0], err_color))
+        goto error;
 
       if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
         break;
+
+      continue;
     } else if (pollres < 0) {
       if (errno == EINTR)
         continue;
 
-      perror("poll");
+      perror("poll"); // Fall through to error;
     }
 
-    // If we fall through here, either the dye_pipe or the poll have errored out. Just clean up the
-    // mess and quit.
+  error:
     kill(pid, SIGTERM);
     break;
   }
