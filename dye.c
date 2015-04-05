@@ -47,10 +47,16 @@ void dye_pipe(int in_fd, const char* color_string) {
   char buffer[128];
   size_t nbyte;
 
-  while((nbyte = read(in_fd, buffer, sizeof(buffer))) > 0) {
+  for (;;) {
+    while ((nbyte = read(in_fd, buffer, sizeof(buffer))) == -1 && errno == EINTR);
+
+    if (nbyte <= 0) // Less than 0: Error; Equals 0: Pipe's empty.
+      break;
+
     write(STDOUT_FILENO, color_string, colorcode_len);
     write(STDOUT_FILENO, buffer, nbyte);
   }
+
 }
 
 int main(int argc, char** argv) {
