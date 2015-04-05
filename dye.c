@@ -41,6 +41,26 @@ int choose_color(char* colorname, char const** colorcode) {
   return -1;
 }
 
+ssize_t do_write(int fd, const char* buf, size_t len) {
+  ssize_t total = 0;
+
+  while (len) {
+    ssize_t written = write(fd, buf, len);
+    if (written == -1) {
+      if (errno == EINTR)
+        continue;
+
+      return -1;
+    }
+
+    buf += written;
+    len -= written;
+    total += written;
+  }
+
+  return total;
+}
+
 void dye_pipe(int in_fd, const char* color_string) {
   char buffer[128];
   size_t nbyte;
@@ -51,8 +71,8 @@ void dye_pipe(int in_fd, const char* color_string) {
     if (nbyte <= 0) // Less than 0: Error; Equals 0: Pipe's empty.
       break;
 
-    write(STDOUT_FILENO, color_string, strlen(color_string));
-    write(STDOUT_FILENO, buffer, nbyte);
+    do_write(STDOUT_FILENO, color_string, strlen(color_string));
+    do_write(STDOUT_FILENO, buffer, nbyte);
   }
 
 }
@@ -166,8 +186,9 @@ int main(int argc, char** argv) {
     }
   }
 
+  // Reset color before exiting.
   char reset_colorcode[] = "\033[39m";
-  write(STDOUT_FILENO, reset_colorcode, strlen(reset_colorcode)); // Reset color before exiting.
+  do_write(STDOUT_FILENO, reset_colorcode, strlen(reset_colorcode)); // Ignore errors here.
 
   int status;
   if (wait(&status) < 0) {
