@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
       if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
         break;
     } else if (pollres < 0) {
-      if (errno == EINTR || errno == EAGAIN)
+      if (errno == EINTR)
         continue;
 
       perror("poll");
