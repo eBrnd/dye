@@ -213,18 +213,18 @@ int main(int argc, char** argv) {
 
   struct pollfd pollfds[] = { { outsock_fds[0], POLLIN, 0 }, { errsock_fds[0], POLLIN, 0 } };
 
-  for (;;) {
+  bool running = true;
+  while (running) {
     int pollres = poll(pollfds, 2, -1);
 
     if (pollres > 0) {
+      running = !(pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP);
+
       if (pollfds[0].revents & POLLIN && !dye_pipe(outsock_fds[0], out_color))
         goto error;
 
       if (pollfds[1].revents & POLLIN && !dye_pipe(errsock_fds[0], err_color))
         goto error;
-
-      if (pollfds[0].revents & POLLHUP && pollfds[1].revents & POLLHUP)
-        break;
 
       continue;
     } else if (pollres < 0) {
