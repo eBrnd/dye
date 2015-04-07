@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -64,11 +65,36 @@ ssize_t do_write(int fd, const char* buf, size_t len) {
 }
 
 bool dye_pipe(int in_fd, const char* color_string) {
-  char buffer[128];
+  static char* buffer;
+  static ssize_t buf_size;
+  static size_t PSIZE;
+
+  if (!buffer)
+    PSIZE = sysconf(_SC_PAGE_SIZE);
+
   ssize_t nbyte;
 
   for (;;) {
-    while ((nbyte = read(in_fd, buffer, sizeof(buffer))) == -1 && errno == EINTR);
+    nbyte = recv(in_fd, 0, 0, MSG_PEEK | MSG_TRUNC);
+
+    if (nbyte > buf_size) {
+      if (nbyte % PSIZE)
+        nbyte = nbyte + (PSIZE - nbyte % PSIZE);
+
+      buf_size = nbyte;
+
+      if (buffer)
+        munmap(buffer, buf_size);
+
+      buffer = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
+      if (buffer == MAP_FAILED) {
+        perror("mmap");
+        exit(1);
+      }
+      buf_size = nbyte;
+    }
+
+    while ((nbyte = read(in_fd, buffer, buf_size)) == -1 && errno == EINTR);
 
     if (nbyte <= 0) // Less than 0: Error; Equals 0: Pipe's empty.
       break;
