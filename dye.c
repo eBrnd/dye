@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -66,14 +67,16 @@ bool dye_pipe(int in_fd, const char* color_string) {
   static char* buffer;
   static ssize_t buf_size;
   static size_t PSIZE;
+  int nbyte;
 
   if (!buffer)
     PSIZE = sysconf(_SC_PAGE_SIZE);
 
-  ssize_t nbyte;
-
   for (;;) {
-    nbyte = recv(in_fd, 0, 0, MSG_PEEK | MSG_TRUNC);
+    if (ioctl(in_fd, FIONREAD, &nbyte) == -1) {
+      perror("ioctl");
+      return false;
+    }
 
     if (nbyte > buf_size) {
       if (nbyte % PSIZE)
