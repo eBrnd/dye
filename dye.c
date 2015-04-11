@@ -79,17 +79,16 @@ bool dye_pipe(int in_fd, const char* color_string) {
       if (nbyte % PSIZE)
         nbyte = nbyte + (PSIZE - nbyte % PSIZE);
 
-      buf_size = nbyte;
-
       if (buffer)
         munmap(buffer, buf_size);
+
+      buf_size = nbyte;
 
       buffer = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
       if (buffer == MAP_FAILED) {
         perror("mmap");
         exit(1);
       }
-      buf_size = nbyte;
     }
 
     while ((nbyte = read(in_fd, buffer, buf_size)) == -1 && errno == EINTR);
